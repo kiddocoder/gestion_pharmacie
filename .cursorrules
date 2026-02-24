@@ -1,0 +1,248 @@
+# PHARMATRACK-BI — Cursor AI Rules
+# National Pharmaceutical Traceability Platform — Burundi
+# =========================================================
+# These rules govern ALL code generation in this project.
+# Cursor must follow every rule without exception.
+# =========================================================
+
+## 1. IDENTITY & SCOPE
+- This is a GOVERNMENT-GRADE, REGULATORY-QUALITY backend system.
+- It is the National Pharmaceutical Traceability Platform for the Republic of Burundi.
+- Every decision must prioritize data integrity, auditability, and security over convenience.
+- No shortcuts, no demo code, no TODO placeholders left in production paths.
+
+---
+
+## 2. TECH STACK (IMMUTABLE)
+- **Language**: Python 3.12+
+- **Framework**: Django 5.x + Django REST Framework 3.15+
+- **Database**: PostgreSQL 16+ (leverage PostgreSQL-specific features actively)
+- **Auth**: JWT via `djangorestframework-simplejwt` with refresh token rotation
+- **Admin**: Django Default Admin (no third-party admin panels)
+- **Task Queue**: Celery + Redis (for async jobs, expiry checks, notifications)
+- **Caching**: Redis
+- **Storage**: Django Storages (S3-compatible for documents/QR codes)
+- **Containerization**: Docker + docker-compose
+
+---
+
+## 3. PROJECT STRUCTURE (MANDATORY)
+```
+pharmatrack_bi/
+├── config/                  # Django settings, urls, wsgi, asgi
+│   ├── settings/
+│   │   ├── base.py
+│   │   ├── development.py
+│   │   └── production.py
+│   ├── urls.py
+│   └── wsgi.py
+├── core/                    # Shared mixins, base models, utilities
+├── users/                   # Custom user model, RBAC, auth
+├── geography/               # Administrative hierarchy (Province → Colline)
+├── medicines/               # National medicine registry, lots
+├── pharmacies/              # Private pharmacy management
+├── stock/                   # Movement-based stock engine
+├── b2b/                     # Wholesaler-to-retailer orders
+├── public_sector/           # Public health facilities & supply chain
+├── finance/                 # Double-entry accounting
+├── inspection/              # Inspections, infractions, fines
+├── analytics/               # Materialized views, aggregations
+├── scripts/                 # Management commands, data seeders
+└── tests/                   # Mirrored test structure per app
+```
+
+Each app MUST contain:
+```
+<app>/
+├── __init__.py
+├── models.py          (or models/ package for complex apps)
+├── serializers.py     (or serializers/ package)
+├── views.py           (or views/ package)
+├── services.py        (business logic — NO business logic in views/serializers)
+├── permissions.py
+├── admin.py
+├── urls.py
+├── tasks.py           (Celery tasks if needed)
+├── signals.py         (if needed)
+└── tests/
+    ├── test_models.py
+    ├── test_services.py
+    └── test_views.py
+```
+
+---
+
+## 4. MODEL RULES (CRITICAL)
+- **ALL primary keys are UUIDs**: `id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)`
+- **ALL regulatory/financial models use soft delete**: never hard delete; use `is_deleted`, `deleted_at`, `deleted_by`
+- **Stock movements are INSERT-ONLY**: never update or delete a StockMovement row
+- **Audit fields on every model**:
+  ```python
+  created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+  updated_at = models.DateTimeField(auto_now=True)
+  created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='+')
+  updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='+')
+  ```
+- **Every model must have a `Meta` class** with:
+  - `verbose_name` and `verbose_name_plural`
+  - `ordering`
+  - `indexes` (at minimum on FK fields and status fields)
+  - `constraints` where business rules apply
+- **Use `django.db.models.constraints.CheckConstraint`** for database-enforced business rules
+- **Use `UniqueConstraint`** instead of `unique=True` when conditions apply
+- **JSONB fields**: use `django.contrib.postgres.fields.JSONField` for flexible structured data (audit logs, metadata)
+- **Monetary values**: always use `DecimalField(max_digits=15, decimal_places=2)` — never float
+- **Choices**: always defined as `TextChoices` or `IntegerChoices` enums inside the model class
+
+Example:
+```python
+class StatusChoices(models.TextChoices):
+    PENDING = 'PENDING', _('Pending')
+    ACTIVE  = 'ACTIVE',  _('Active')
+```
+
+---
+
+## 5. SERVICE LAYER (MANDATORY)
+- **ALL business logic lives in `services.py`** — never in views, serializers, or models
+- Services are plain Python classes or functions — no Django magic
+- Wrap multi-step operations in `django.db.transaction.atomic()`
+- Services raise typed exceptions (`ValidationError`, custom domain exceptions)
+- Services must be independently testable (no HTTP context)
+
+Example pattern:
+```python
+# services.py
+from django.db import transaction
+
+class StockService:
+    @staticmethod
+    @transaction.atomic
+    def record_movement(*, lot_id, entity_id, movement_type, quantity, user):
+        # 1. validate lot is active
+        # 2. check sufficient stock if outbound
+        # 3. insert StockMovement (never update)
+        # 4. write AuditLog
+        # 5. return movement
+```
+
+---
+
+## 6. API / SERIALIZER RULES
+- Use `ModelSerializer` as base; override fields explicitly — never use `fields = '__all__'`
+- Separate **read serializers** from **write serializers** for complex models
+- Validate at serializer level; enforce business rules at service level
+- Viewsets use `SerializerClassMixin` to switch serializers by action
+- All list endpoints support: filtering (`django-filter`), ordering, searching, pagination
+- Pagination: `PageNumberPagination` with `page_size=25`, `max_page_size=200`
+- API versioning: URL namespace `v1/`
+- Return consistent error envelope:
+  ```json
+  { "success": false, "errors": { "field": ["message"] }, "code": "ERROR_CODE" }
+  ```
+
+---
+
+## 7. PERMISSIONS & RBAC
+- **No logic in default DRF permissions classes** — use custom permission classes in `permissions.py`
+- Permissions check both Role and Scope (PRIVATE / PUBLIC / NATIONAL)
+- Every ViewSet must explicitly declare `permission_classes`
+- Use `has_object_permission` for row-level checks
+- Scoped roles example: a PROVINCE-level inspector cannot inspect outside their province
+- JWT payload must include: `user_id`, `roles`, `scope`, `entity_id`
+
+---
+
+## 8. DJANGO ADMIN (REQUIRED QUALITY BAR)
+Every registered model admin must have:
+- `list_display` with at minimum 5 meaningful fields
+- `list_filter` with status, dates, and geographic fields where applicable
+- `search_fields` on name, code, CIN, phone fields
+- `readonly_fields` for all audit fields
+- `fieldsets` for logical grouping
+- `date_hierarchy` on `created_at` where useful
+- `list_select_related = True` to prevent N+1
+- `show_full_result_count = False` on large tables for performance
+- Status fields rendered as colored HTML badges via `mark_safe`
+- Soft-deleted objects excluded by default; separate admin view to access them
+
+---
+
+## 9. DATABASE & PERFORMANCE
+- **Migrations**: always run `makemigrations --check` in CI; migration files are committed
+- **Indexes**: add `db_index=True` on every FK, every status field, every date field used in filters
+- **Composite indexes**: add for common query patterns (e.g., `(entity_type, entity_id, lot_id)` on stock)
+- **Query optimization**: use `select_related` and `prefetch_related` explicitly; never lazy-load in loops
+- **Raw SQL**: allowed only in analytics app for materialized views and complex aggregations
+- **Materialized views**: defined in migrations as `RunSQL` operations; refreshed via Celery
+- **Partitioning**: StockMovement table must be designed partition-ready (by `created_at` range)
+- **Connection pooling**: use PgBouncer in production
+- PostgreSQL extensions to enable: `uuid-ossp`, `pg_trgm` (for trigram search), `btree_gin`
+
+---
+
+## 10. GEOGRAPHY — BURUNDI ADMINISTRATIVE HIERARCHY
+- **New official subdivision** (post-2022 reform): Province → Commune → Zone → Colline/Quartier
+- Source data: `https://github.com/mosiflow/burundi-new-subdivision-json`
+- The `AdministrativeLevel` model is **self-referencing** with a `level_type` field
+- Level types: `PROVINCE`, `COMMUNE`, `ZONE`, `COLLINE`
+- Burundi has **18 provinces** under the new subdivision
+- Seed data must be loaded from the official JSON via a management command: `python manage.py seed_geography`
+- Enforce parent-child level integrity via `CheckConstraint` (a COLLINE's parent must be a ZONE, etc.)
+- Geography is referenced by users, pharmacies, facilities, inspections — use FK to `AdministrativeLevel`
+
+---
+
+## 11. SECURITY
+- Never log passwords, tokens, or PII in plain text
+- All sensitive fields encrypted at rest using `django-encrypted-model-fields` or Vault
+- Rate limiting on auth endpoints: `django-ratelimit` or DRF throttling
+- CORS: whitelist only known frontend origins
+- `DEBUG=False` enforced in production settings
+- `SECRET_KEY` and all credentials via environment variables only — never hardcoded
+- Use `django-csp` for Content Security Policy headers
+- OTP codes expire in 5 minutes; device tokens expire in 30 days
+
+---
+
+## 12. AUDIT & TRACEABILITY
+- Every write operation (create/update/soft-delete) must produce an `AuditLog` entry
+- AuditLog stores: `actor`, `action`, `model_name`, `object_id`, `old_values (JSONB)`, `new_values (JSONB)`, `ip_address`, `timestamp`
+- Use Django signals or a mixin to auto-capture audit logs
+- Financial journal entries are IMMUTABLE after posting — no updates, only reversal entries
+- Stock movements are IMMUTABLE — no updates, no deletes, ever
+
+---
+
+## 13. TESTING REQUIREMENTS
+- Minimum 80% test coverage across the codebase
+- Unit tests: services, models (constraints, methods)
+- Integration tests: full API flows via DRF APIClient
+- Use `pytest-django` + `factory_boy` for fixtures
+- No hardcoded IDs in tests — use factories
+- Each atomic transaction must have a test that verifies rollback on partial failure
+
+---
+
+## 14. CODE STYLE
+- Follow PEP 8 strictly
+- Use `black` for formatting, `isort` for imports, `flake8` for linting
+- Type hints on all service methods and utility functions
+- Docstrings on all models (class-level), all service methods, all non-trivial functions
+- No `print()` statements — use Python `logging` module
+- No bare `except:` clauses — always catch specific exceptions
+- Constants in `UPPER_SNAKE_CASE`, defined in `core/constants.py` or within the relevant model
+
+---
+
+## 15. WHAT CURSOR MUST NEVER DO
+- Never use `fields = '__all__'` in any serializer
+- Never write business logic in a view or serializer
+- Never hard-delete a regulatory model (medicines, lots, movements, audit logs)
+- Never use `FloatField` for money
+- Never generate migrations with `--fake` without explicit instruction
+- Never commit secrets or `.env` files
+- Never bypass `atomic()` for stock or finance operations
+- Never use `SuspiciousOperation` suppression patterns
+- Never create API endpoints without explicit `permission_classes`
+- Never generate frontend code (HTML, CSS, JS, React, etc.)

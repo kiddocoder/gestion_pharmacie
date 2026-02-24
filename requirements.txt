@@ -1,8 +1,44 @@
+# PharmaTrack-BI — National Pharmaceutical Traceability Platform
+# Core
 django==5.2.10
 djangorestframework==3.16.0
-markdown
-django-filter
-psycopg2-binary
-Pillow
-channels
-djangorestframework-simplejwt
+django-filter==25.1
+django-cors-headers==4.7.0
+django-environ==0.12.0
+
+# Database
+psycopg2-binary==2.9.10
+
+# Authentication
+djangorestframework-simplejwt==5.5.0
+
+# Task Queue
+celery==5.5.1
+redis==5.3.0
+django-celery-beat==2.8.1
+
+# Storage
+django-storages==1.14.4
+boto3==1.36.24
+Pillow==11.1.0
+
+# Security
+django-csp==4.0
+django-ratelimit==4.1.0
+
+# Utilities
+markdown==3.7
+python-dateutil==2.9.0.post0
+qrcode==8.0
+
+# Development & Testing
+pytest==8.3.4
+pytest-django==4.10.0
+pytest-cov==6.0.0
+factory-boy==3.3.1
+black==25.1.0
+isort==6.0.1
+flake8==7.1.2
+
+# Monitoring
+gunicorn==23.0.0
