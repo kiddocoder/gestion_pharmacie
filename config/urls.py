@@ -36,6 +36,10 @@ def api_root(request, format=None):
         'geography': {
             'levels': reverse('api-v1:geography:level-list', request=request, format=format),
         },
+        'medicines': {
+            'list': reverse('api-v1:medicines:medicine-list', request=request, format=format),
+            'lots': reverse('api-v1:medicines:lots:lot-list', request=request, format=format),
+        },
     })
 
 
@@ -44,6 +48,7 @@ api_v1_patterns = [
     path('auth/', include('users.urls', namespace='auth')),
     path('users/', include('users.urls_users', namespace='users')),
     path('geography/', include('geography.urls', namespace='geography')),
+    path('medicines/', include('medicines.urls', namespace='medicines')),
 ]
 
 urlpatterns = [

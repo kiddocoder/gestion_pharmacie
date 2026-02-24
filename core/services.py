@@ -7,6 +7,7 @@ Provides methods for writing audit log entries from any app.
 """
 
 import logging
+from decimal import Decimal
 from typing import Any
 
 from django.forms.models import model_to_dict
@@ -46,15 +47,24 @@ class AuditService:
     def snapshot(instance, fields=None) -> dict[str, Any]:
         """
         Serialise a model instance to a plain dict suitable for JSONB
-        storage. DateTimes are ISO-formatted; UUIDs stringified.
+        storage. DateTimes are ISO-formatted; UUIDs stringified;
+        M2M / querysets reduced to lists of PKs.
         """
         data = model_to_dict(instance, fields=fields)
         cleaned: dict[str, Any] = {}
         for key, value in data.items():
-            if hasattr(value, 'isoformat'):
+            if value is None:
+                cleaned[key] = None
+            elif isinstance(value, Decimal):
+                cleaned[key] = str(value)
+            elif hasattr(value, 'isoformat'):
                 cleaned[key] = value.isoformat()
             elif hasattr(value, 'hex'):
                 cleaned[key] = str(value)
+            elif hasattr(value, 'all'):
+                cleaned[key] = [str(obj.pk) for obj in value.all()]
+            elif isinstance(value, (list, tuple)):
+                cleaned[key] = [str(v.pk) if hasattr(v, 'pk') else v for v in value]
             else:
                 cleaned[key] = value
         return cleaned

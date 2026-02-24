@@ -226,6 +226,12 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+CELERY_BEAT_SCHEDULE = {
+    'expire-overdue-lots-daily': {
+        'task': 'medicines.expire_overdue_lots',
+        'schedule': 86400.0,  # every 24 hours (in seconds)
+    },
+}
 
 
 # ---------------------------------------------------------------------------

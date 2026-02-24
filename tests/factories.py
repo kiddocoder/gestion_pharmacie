@@ -8,12 +8,15 @@ modules.
 """
 
 import uuid
+from datetime import timedelta
+from decimal import Decimal
 
 import factory
 from django.utils import timezone
 
 from core.models import AuditLog
 from geography.models import AdministrativeLevel
+from medicines.models import NationalLot, NationalMedicine
 from users.models import DeviceToken, OTPCode, Role, User, UserRole
 
 
@@ -98,6 +101,41 @@ class UserRoleFactory(factory.django.DjangoModelFactory):
     user = factory.SubFactory(UserFactory)
     role = factory.SubFactory(RoleFactory)
     is_active = True
+
+
+# ---------------------------------------------------------------------------
+# Medicines
+# ---------------------------------------------------------------------------
+
+class NationalMedicineFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = NationalMedicine
+
+    atc_code = factory.Sequence(lambda n: f'N{n:02d}BE{n:02d}')
+    inn = factory.Sequence(lambda n: f'Medicine-INN-{n}')
+    brand_name = factory.Sequence(lambda n: f'Brand-{n}')
+    dosage_form = NationalMedicine.DosageFormChoices.TABLET
+    strength = '500mg'
+    packaging = 'Box of 20 tablets'
+    manufacturer = factory.Faker('company')
+    country_of_origin = 'India'
+    authorized_price = factory.LazyFunction(lambda: Decimal('5000.00'))
+    is_controlled = False
+    status = NationalMedicine.StatusChoices.AUTHORIZED
+
+
+class NationalLotFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = NationalLot
+
+    medicine = factory.SubFactory(NationalMedicineFactory)
+    batch_number = factory.Sequence(lambda n: f'LOT-{n:06d}')
+    manufacturing_date = factory.LazyFunction(lambda: (timezone.now() - timedelta(days=180)).date())
+    expiry_date = factory.LazyFunction(lambda: (timezone.now() + timedelta(days=365)).date())
+    quantity_imported = 10000
+    import_reference = factory.Sequence(lambda n: f'IMP-{n:04d}')
+    supplier = factory.Faker('company')
+    status = NationalLot.StatusChoices.ACTIVE
 
 
 # ---------------------------------------------------------------------------
