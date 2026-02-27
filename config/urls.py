@@ -40,6 +40,10 @@ def api_root(request, format=None):
             'list': reverse('api-v1:medicines:medicine-list', request=request, format=format),
             'lots': reverse('api-v1:medicines:lots:lot-list', request=request, format=format),
         },
+        'pharmacies': reverse('api-v1:pharmacies:pharmacy-list', request=request, format=format),
+        'b2b': {
+            'orders': reverse('api-v1:b2b:order-list', request=request, format=format),
+        },
     })
 
 
@@ -49,6 +53,8 @@ api_v1_patterns = [
     path('users/', include('users.urls_users', namespace='users')),
     path('geography/', include('geography.urls', namespace='geography')),
     path('medicines/', include('medicines.urls', namespace='medicines')),
+    path('pharmacies/', include('pharmacies.urls', namespace='pharmacies')),
+    path('b2b/', include('b2b.urls', namespace='b2b')),
 ]
 
 urlpatterns = [

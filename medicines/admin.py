@@ -125,6 +125,8 @@ class NationalMedicineAdmin(admin.ModelAdmin):
 def _render_expiry_badge(obj):
     """Shared helper for expiry color coding."""
     days = obj.days_to_expiry
+    if days is None:
+        return '—'
     if days < 0:
         color, label = '#dc2626', f'EXPIRED ({abs(days)}d ago)'
     elif days <= 30:

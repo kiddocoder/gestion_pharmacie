@@ -212,10 +212,14 @@ class NationalLot(RegulatedModel):
 
     @property
     def is_expired(self) -> bool:
+        if not self.expiry_date:
+            return False
         return self.expiry_date < timezone.now().date()
 
     @property
-    def days_to_expiry(self) -> int:
+    def days_to_expiry(self) -> int | None:
+        if not self.expiry_date:
+            return None
         return (self.expiry_date - timezone.now().date()).days
 
     @property

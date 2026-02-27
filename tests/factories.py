@@ -12,11 +12,15 @@ from datetime import timedelta
 from decimal import Decimal
 
 import factory
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 
+from b2b.models import B2BOrder, B2BOrderItem, PharmacyCredit
 from core.models import AuditLog
 from geography.models import AdministrativeLevel
 from medicines.models import NationalLot, NationalMedicine
+from pharmacies.models import Pharmacy, PharmacyDocument
+from stock.models import StockMovement
 from users.models import DeviceToken, OTPCode, Role, User, UserRole
 
 
@@ -136,6 +140,89 @@ class NationalLotFactory(factory.django.DjangoModelFactory):
     import_reference = factory.Sequence(lambda n: f'IMP-{n:04d}')
     supplier = factory.Faker('company')
     status = NationalLot.StatusChoices.ACTIVE
+
+
+# ---------------------------------------------------------------------------
+# Pharmacies
+# ---------------------------------------------------------------------------
+
+class PharmacyFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Pharmacy
+
+    name = factory.Sequence(lambda n: f'Pharmacy-{n}')
+    pharmacy_type = Pharmacy.TypeChoices.RETAILER
+    national_code = factory.Sequence(lambda n: f'PH-TST-{n:04d}')
+    administrative_level = factory.SubFactory(CommuneFactory)
+    status = Pharmacy.StatusChoices.PENDING
+    address = factory.Faker('street_address')
+    phone = factory.Sequence(lambda n: f'+2577{n:07d}')
+
+
+class PharmacyDocumentFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = PharmacyDocument
+
+    pharmacy = factory.SubFactory(PharmacyFactory)
+    document_type = PharmacyDocument.DocumentTypeChoices.LICENSE
+    status = PharmacyDocument.StatusChoices.PENDING
+    file = factory.LazyAttribute(
+        lambda _: SimpleUploadedFile('doc.pdf', b'pdf content', content_type='application/pdf'),
+    )
+
+
+# ---------------------------------------------------------------------------
+# B2B
+# ---------------------------------------------------------------------------
+
+class PharmacyCreditFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = PharmacyCredit
+
+    pharmacy = factory.SubFactory(PharmacyFactory)
+    credit_limit = factory.LazyFunction(lambda: Decimal('1000000.00'))
+    current_balance = Decimal('0')
+    reserved_balance = Decimal('0')
+
+
+class B2BOrderFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = B2BOrder
+
+    seller = factory.SubFactory(PharmacyFactory, pharmacy_type=Pharmacy.TypeChoices.WHOLESALER)
+    buyer = factory.SubFactory(PharmacyFactory, pharmacy_type=Pharmacy.TypeChoices.RETAILER)
+    status = B2BOrder.StatusChoices.DRAFT
+    total_amount = Decimal('0')
+    credit_used = Decimal('0')
+    payment_status = B2BOrder.PaymentStatusChoices.PENDING
+
+
+class B2BOrderItemFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = B2BOrderItem
+
+    order = factory.SubFactory(B2BOrderFactory)
+    lot = factory.SubFactory(NationalLotFactory)
+    quantity_ordered = 10
+    quantity_delivered = 0
+    unit_price = factory.LazyAttribute(lambda o: o.lot.medicine.authorized_price)
+
+
+# ---------------------------------------------------------------------------
+# Stock
+# ---------------------------------------------------------------------------
+
+class StockMovementFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = StockMovement
+
+    entity_type = StockMovement.EntityType.PHARMACY
+    entity_id = factory.LazyFunction(uuid.uuid4)
+    lot = factory.SubFactory(NationalLotFactory)
+    movement_type = StockMovement.MovementType.IMPORT
+    quantity = 100
+    reference_type = ''
+    created_by = factory.SubFactory(UserFactory)
 
 
 # ---------------------------------------------------------------------------

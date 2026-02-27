@@ -30,8 +30,9 @@ class BusinessRuleViolation(APIException):
     default_code = 'BUSINESS_RULE_VIOLATION'
 
 
-class InsufficientStockError(BusinessRuleViolation):
-    """Raised when an outbound stock movement exceeds available balance."""
+class InsufficientStockError(APIException):
+    """Raised when an outbound stock movement exceeds available balance (e.g. concurrent sale)."""
+    status_code = status.HTTP_409_CONFLICT
     default_detail = 'Insufficient stock for this operation.'
     default_code = 'INSUFFICIENT_STOCK'
 

@@ -11,6 +11,14 @@ from rest_framework import serializers
 from .models import AdministrativeLevel
 
 
+class AdministrativeLevelMinimalSerializer(serializers.ModelSerializer):
+    """Minimal fields for embedding in other serializers (e.g. pharmacy commune)."""
+
+    class Meta:
+        model = AdministrativeLevel
+        fields = ['id', 'name', 'code', 'level_type']
+
+
 class AdministrativeLevelReadSerializer(serializers.ModelSerializer):
     """Flat read representation with parent name."""
 
